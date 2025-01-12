@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Search</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .loading-spinner {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="text-center">Search for Flights</h1>
+    <form id="flightSearchForm" class="container">
+        <div class="form-group">
+            <label for="startLocation">Starting Location:</label>
+            <input type="text" class="form-control" id="startLocation" name="startLocation" required>
+        </div>
+        <div class="form-group">
+            <label for="endLocation">Ending Location:</label>
+            <input type="text" class="form-control" id="endLocation" name="endLocation" required>
+        </div>
+        <div class="form-group">
+            <label for="travelDate">Date of Travel:</label>
+            <input type="date" class="form-control" id="travelDate" name="travelDate" required>
+        </div>
+        <div class="form-group">
+            <label for="numTravelers">Number of Travelers:</label>
+            <input type="number" class="form-control" id="numTravelers" name="numTravelers" min="1" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Search Flights</button>
+        <button type="reset" class="btn btn-secondary">Clear</button>
+    </form>
+
+    <div class="loading-spinner text-center">
+        <div class="spinner-border" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
+
+    <div id="results" class="container mt-4"></div>
+
+    <!-- Booking Modal -->
+    <div class="modal fade" id="bookingModal" tabindex="-1" role="dialog" aria-labelledby="bookingModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bookingModalLabel">Book Flight</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="bookingForm">
+                        <div class="form-group">
+                            <label for="userId">User ID:</label>
+                            <input type="number" class="form-control" id="userId" name="userId" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="bookingDate">Booking Date:</label>
+                            <input type="date" class="form-control" id="bookingDate" name="bookingDate" required>
+                        </div>
+                        <input type="hidden" id="flightId" name="flightId">
+                        <button type="submit" class="btn btn-primary">Submit Booking</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('flightSearchForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            document.querySelector('.loading-spinner').style.display = 'block';
+
+            const startLocation = document.getElementById('startLocation').value;
+            const endLocation = document.getElementById('endLocation').value;
+            const travelDate = document.getElementById('travelDate').value;
+            const numTravelers = document.getElementById('numTravelers').value;
+
+            if (!startLocation || !endLocation || !travelDate || numTravelers <= 0) {
+                alert('Please fill in all fields correctly.');
+                document.querySelector('.loading-spinner').style.display = 'none';
+                return;
+            }
+
+            fetch('http://localhost:8080/api/flights/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    startLocation: startLocation,
+                    endLocation: endLocation,
+                    travelDate: travelDate,
+                    numTravelers: numTravelers
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.querySelector('.loading-spinner').style.display = 'none';
+
+                const resultsDiv = document.getElementById('results');
+                resultsDiv.innerHTML = '';
+                if (data && data.length > 0) {
+                    resultsDiv.innerHTML = '<h2>Available Flights:</h2>';
+                    data.forEach(flight => {
+                        resultsDiv.innerHTML += `
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">Flight from ${flight.origin} to ${flight.destination}</h5>
+                                    <p class="card-text">Departure Date: ${new Date(flight.departureTime).toLocaleDateString()}</p>
+                                    <p class="card-text">Departure Time: ${flight.departureTime12HourFormat}</p>
+                                    <p class="card-text">Arrival: ${new Date(flight.arrivalTime).toLocaleString()}</p>
+                                    <p class="card-text">Available Seats: ${flight.availableSeats}</p>
+                                    <p class="card-text">Price: $${flight.price}</p>
+                                    <button class="btn btn-success book-flight" data-flight-id="${flight.id}">Book</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    // Add event listeners to "Book" buttons
+                    document.querySelectorAll('.book-flight').forEach(button => {
+                        button.addEventListener('click', function() {
+                            const flightId = this.getAttribute('data-flight-id');
+                            document.getElementById('flightId').value = flightId;
+                            $('#bookingModal').modal('show');
+                        });
+                    });
+                } else {
+                    resultsDiv.innerHTML = '<p>No flights found.</p>';
+                }
+            })
+            .catch(error => {
+                document.querySelector('.loading-spinner').style.display = 'none';
+                console.error('Error:', error);
+                alert('An error occurred while searching for flights.');
+            });
+        });
+
+        document.getElementById('bookingForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const userId = document.getElementById('userId').value;
+            const bookingDate = document.getElementById('bookingDate').value;
+            const flightId = document.getElementById('flightId').value;
+
+            fetch(`http://localhost:8080/api/bookings?userId=${userId}&flightId=${flightId}&bookingDate=${bookingDate}`, {
+                method: 'POST'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                $('#bookingModal').modal('hide');
+                alert('Booking successful!');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while booking the flight.');
+            });
+        });
+    </script>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
